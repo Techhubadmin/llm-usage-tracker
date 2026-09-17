@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Usage</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+    --series: #2a78d6; --bad: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19;
+      --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+      --series: #3987e5; --bad: #e66767;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+
+  header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 auto 0 0; }
+  .range { display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--border);
+           border-radius: 8px; padding: 3px; }
+  .range button { border: 0; background: transparent; color: var(--ink-2); padding: 6px 12px;
+                  border-radius: 6px; cursor: pointer; font: inherit; }
+  .range button[aria-pressed="true"] { background: var(--series); color: #fff; }
+  .updated { color: var(--muted); font-size: 12px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 0 0 12px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .tile .label { color: var(--ink-2); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .tile .value { font-size: 28px; font-weight: 600; margin-top: 4px; }
+  .tile .sub { color: var(--muted); font-size: 12px; margin-top: 2px; min-height: 1.4em; }
+
+  .chart { margin-top: 12px; position: relative; }
+  .chart svg { display: block; width: 100%; height: 180px; }
+  .tip { position: absolute; display: none; pointer-events: none; transform: translate(-50%, -100%);
+         background: var(--ink); color: var(--page); padding: 6px 8px; border-radius: 6px;
+         font-size: 12px; white-space: nowrap; }
+
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-top: 12px; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .num { text-align: right; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 12px;
+         background: var(--grid); color: var(--ink-2); }
+  .err { color: var(--bad); }
+  .dim { color: var(--muted); }
+
+  .empty { margin-top: 12px; color: var(--ink-2); }
+  .empty p { margin: 0 0 8px; }
+  pre { background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+        overflow: auto; font-size: 12px; margin: 0 0 12px; }
+
+  footer { margin-top: 20px; color: var(--muted); font-size: 12px; display: flex; gap: 12px; }
+  footer a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>LLM Usage</h1>
+    <div class="range" role="group" aria-label="Time range">
+      <button data-range="today">Today</button>
+      <button data-range="7d">7 days</button>
+      <button data-range="30d">30 days</button>
+      <button data-range="all">All</button>
+    </div>
+    <span class="updated" id="updated"></span>
+  </header>
+
+  <section class="tiles">
+    <div class="card tile"><div class="label">Spend</div><div class="value" id="t-cost">–</div><div class="sub" id="t-cost-sub"></div></div>
+    <div class="card tile"><div class="label">Requests</div><div class="value" id="t-req">–</div><div class="sub" id="t-req-sub"></div></div>
+    <div class="card tile"><div class="label">Input tokens</div><div class="value" id="t-in">–</div><div class="sub" id="t-in-sub"></div></div>
+    <div class="card tile"><div class="label">Output tokens</div><div class="value" id="t-out">–</div><div class="sub" id="t-out-sub"></div></div>
+  </section>
+
+  <section class="card chart">
+    <h2>Spend by day</h2>
+    <svg id="chart" role="img" aria-label="Daily spend in US dollars"></svg>
+    <div class="tip" id="tip"></div>
+  </section>
+
+  <section class="grid2">
+    <div class="card"><h2>By model</h2><div class="scroll"><table id="by-model"></table></div></div>
+    <div class="card"><h2>By project</h2><div class="scroll"><table id="by-project"></table></div></div>
+  </section>
+
+  <section class="card" style="margin-top:12px">
+    <h2>Recent requests</h2>
+    <div class="scroll"><table id="recent"></table></div>
+  </section>
+
+  <section class="card empty" id="empty" hidden>
+    <p><strong>Nothing recorded yet.</strong> Point your SDK at the proxy and every call shows up here:</p>
+<pre>ANTHROPIC_BASE_URL=http://localhost:4141/proxy/anthropic
+OPENAI_BASE_URL=http://localhost:4141/proxy/openai/v1</pre>
+    <p>Or log a call directly:</p>
+<pre>curl -X POST http://localhost:4141/api/log -H "content-type: application/json" \
+  -d '{"model":"claude-opus-5","project":"my-app","input_tokens":1200,"output_tokens":300}'</pre>
+    <p>Want sample data first? Run <code>npm run seed</code>.</p>
+  </section>
+
+  <footer>
+    <a href="/api/export.csv">Export CSV</a> <span>·</span>
+    <a href="/api/pricing">Pricing table</a> <span>·</span>
+    <span>Refreshes every 10 s</span>
+  </footer>
+</main>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fmtTok = (n) => (n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n));
+  const fmtUsd = (n) => '$' + (n >= 100 ? n.toFixed(0) : n >= 1 ? n.toFixed(2) : n.toFixed(4));
+  const fmtInt = (n) => Number(n).toLocaleString();
+  const fmtDay = (day, long) => new Date(day + 'T12:00:00').toLocaleDateString(undefined, long ? { weekday: 'short', month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric' });
+
+  // ---- state -----------------------------------------------------------------
+  let range = '7d';
+  try { range = localStorage.getItem('llm-range') || range; } catch {}
+  let lastDays = [];
+
+  document.querySelectorAll('.range button').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.range === range));
+    b.onclick = () => {
+      range = b.dataset.range;
+      try { localStorage.setItem('llm-range', range); } catch {}
+      document.querySelectorAll('.range button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      load();
+    };
+  });
+
+  // ---- load + render ---------------------------------------------------------
+  async function load() {
+    const [s, events] = await Promise.all([
+      fetch('/api/summary?range=' + range).then((r) => r.json()),
+      fetch('/api/events?limit=25').then((r) => r.json()),
+    ]);
+    renderTiles(s.totals);
+    lastDays = s.by_day;
+    renderChart(lastDays);
+    renderGroups(s);
+    renderRecent(events);
+    $('#empty').hidden = events.length > 0;
+    $('#updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  }
+
+  function renderTiles(t) {
+    $('#t-cost').textContent = fmtUsd(t.cost);
+    $('#t-cost-sub').textContent = t.unpriced ? `${fmtInt(t.unpriced)} calls have no price set` : (t.requests ? `${fmtUsd(t.cost / t.requests)} per request` : '');
+    $('#t-req').textContent = fmtInt(t.requests);
+    $('#t-req-sub').innerHTML = t.errors ? `<span class="err">${fmtInt(t.errors)} failed</span>` : 'no failures';
+    $('#t-in').textContent = fmtTok(t.input_tokens);
+    $('#t-in-sub').textContent = t.cache_read_tokens ? `+ ${fmtTok(t.cache_read_tokens)} read from cache` : '';
+    $('#t-out').textContent = fmtTok(t.output_tokens);
+    $('#t-out-sub').textContent = t.requests ? `${fmtInt(Math.round(t.output_tokens / t.requests))} avg per request` : '';
+  }
+
+  // Single-series bar chart. Bars are flat at the baseline and rounded at the data end.
+  function renderChart(days) {
+    const svg = $('#chart');
+    const W = svg.clientWidth || 800, H = 180, padL = 52, padR = 8, padT = 12, padB = 24;
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+    const max = Math.max(0.0001, ...days.map((d) => d.cost));
+    const slot = innerW / Math.max(1, days.length);
+    const y = (v) => padT + innerH - (v / max) * innerH;
+    let out = '';
+
+    for (const v of [max / 2, max]) {
+      out += `<line x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/>`;
+      out += `<text x="${padL - 8}" y="${y(v) + 4}" text-anchor="end" fill="var(--muted)" font-size="11">$${v >= 100 ? v.toFixed(0) : v.toFixed(2)}</text>`;
+    }
+    out += `<line x1="${padL}" x2="${W - padR}" y1="${padT + innerH}" y2="${padT + innerH}" stroke="var(--axis)"/>`;
+
+    const labelEvery = Math.max(1, Math.ceil(72 / slot));
+    days.forEach((d, i) => {
+      const x = padL + i * slot;
+      const w = Math.max(1, slot - 2);          // 2px surface gap between bars
+      const top = y(d.cost), h = padT + innerH - top;
+      if (h > 0) out += `<path d="${barPath(x + 1, top, w, h, 4)}" fill="var(--series)"/>`;
+      out += `<rect data-i="${i}" x="${x}" y="${padT}" width="${slot}" height="${innerH}" fill="transparent"/>`;
+      if (i % labelEvery === 0 && (days.length - i > labelEvery / 2 || i === days.length - 1))
+        out += `<text x="${x + slot / 2}" y="${H - 6}" text-anchor="middle" fill="var(--muted)" font-size="11">${fmtDay(d.day)}</text>`;
+    });
+    svg.innerHTML = out;
+
+    const tip = $('#tip');
+    svg.onmousemove = (ev) => {
+      const i = ev.target.dataset?.i;
+      if (i == null) { tip.style.display = 'none'; return; }
+      const d = days[i];
+      tip.textContent = `${fmtDay(d.day, true)} · ${fmtUsd(d.cost)} · ${fmtInt(d.requests)} request${d.requests === 1 ? '' : 's'}`;
+      const box = svg.getBoundingClientRect(), host = svg.parentElement.getBoundingClientRect();
+      tip.style.left = box.left - host.left + (padL + (+i + 0.5) * slot) * (box.width / W) + 'px';
+      tip.style.top = box.top - host.top + y(d.cost) * (box.height / H) - 8 + 'px';
+      tip.style.display = 'block';
+    };
+    svg.onmouseleave = () => { tip.style.display = 'none'; };
+  }
+
+  function barPath(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h);
+    return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
+  }
+
+  // ---- tables ----------------------------------------------------------------
+  const cost = (v, r) => (r.unpriced && r.unpriced === r.requests
+    ? '<span class="dim" title="Add this model to pricing.json">no price</span>'
+    : fmtUsd(v));
+
+  function renderGroups(s) {
+    table('#by-model', [
+      { key: 'model', label: 'Model', fmt: (v, r) => `${esc(v)} <span class="dim">${esc(r.provider)}</span>` },
+      { key: 'requests', label: 'Requests', num: true, fmt: fmtInt },
+      { key: 'input_tokens', label: 'In', num: true, fmt: fmtTok },
+      { key: 'output_tokens', label: 'Out', num: true, fmt: fmtTok },
+      { key: 'cost', label: 'Cost', num: true, fmt: cost },
+    ], s.by_model);
+    table('#by-project', [
+      { key: 'project', label: 'Project', fmt: (v) => `<span class="tag">${esc(v)}</span>` },
+      { key: 'requests', label: 'Requests', num: true, fmt: fmtInt },
+      { key: 'input_tokens', label: 'In', num: true, fmt: fmtTok },
+      { key: 'output_tokens', label: 'Out', num: true, fmt: fmtTok },
+      { key: 'cost', label: 'Cost', num: true, fmt: cost },
+    ], s.by_project);
+  }
+
+  function renderRecent(rows) {
+    const today = new Date().toDateString();
+    table('#recent', [
+      { key: 'ts', label: 'Time', fmt: (v) => { const d = new Date(v); return d.toDateString() === today ? d.toLocaleTimeString() : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } },
+      { key: 'project', label: 'Project', fmt: (v) => `<span class="tag">${esc(v)}</span>` },
+      { key: 'model', label: 'Model', fmt: esc },
+      { key: 'input_tokens', label: 'In', num: true, fmt: fmtTok },
+      { key: 'output_tokens', label: 'Out', num: true, fmt: fmtTok },
+      { key: 'cost_usd', label: 'Cost', num: true, fmt: (v, r) => (r.priced ? fmtUsd(v) : '<span class="dim">no price</span>') },
+      { key: 'latency_ms', label: 'Latency', num: true, fmt: (v) => (v == null ? '' : v >= 1000 ? (v / 1000).toFixed(1) + ' s' : v + ' ms') },
+      { key: 'status', label: 'Status', num: true, fmt: (v) => (v == null ? '' : v >= 400 ? `<span class="err">${v}</span>` : String(v)) },
+    ], rows);
+  }
+
+  function table(sel, cols, rows) {
+    const el = $(sel);
+    if (!rows.length) { el.innerHTML = '<tbody><tr><td class="dim">No data in this range</td></tr></tbody>'; return; }
+    el.innerHTML =
+      '<thead><tr>' + cols.map((c) => `<th class="${c.num ? 'num' : ''}">${c.label}</th>`).join('') + '</tr></thead>' +
+      '<tbody>' + rows.map((r) => '<tr>' + cols.map((c) =>
+        `<td class="${c.num ? 'num' : ''}">${c.fmt ? c.fmt(r[c.key], r) : esc(r[c.key])}</td>`).join('') + '</tr>').join('') + '</tbody>';
+  }
+
+  // ---- lifecycle -------------------------------------------------------------
+  load().catch((e) => { $('#updated').textContent = 'Could not reach the server'; console.error(e); });
+  setInterval(() => { if (!document.hidden) load().catch(console.error); }, 10_000);
+  let resizeTimer;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => renderChart(lastDays), 100); });
+</script>
+</body>
+</html>

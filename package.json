@@ -1,0 +1,12 @@
+{
+  "name": "llm-usage-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tracks every LLM API call (tokens, cost, latency) in SQLite and shows it in a simple dashboard.",
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js"
+  }
+}
