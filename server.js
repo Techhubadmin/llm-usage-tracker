@@ -19,9 +19,10 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
 
   try {
-    // ---- proxy: /proxy/<provider>/<upstream path> --------------------------
-    const m = p.match(/^\/proxy\/(anthropic|openai)(\/.*)$/);
-    if (m && UPSTREAMS[m[1]]) return await proxy(req, res, m[1], m[2] + url.search);
+    // ---- proxy: /proxy/<provider>[/<project>]/v1/... ---------------------------
+    // The optional segment before /v1 tags the call with a project name.
+    const m = p.match(/^\/proxy\/(anthropic|openai)(?:\/([^/]+))?(\/v1\/.*)$/);
+    if (m && UPSTREAMS[m[1]]) return await proxy(req, res, m[1], m[3] + url.search, m[2]);
 
     // ---- JSON API -----------------------------------------------------------
     if (p === '/api/summary') return json(res, summary(url.searchParams.get('range') || '7d'));
@@ -36,6 +37,14 @@ const server = http.createServer(async (req, res) => {
     console.error(err);
     json(res, { error: String(err.message || err) }, 500);
   }
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Is the tracker already running?`);
+    process.exit(1);
+  }
+  throw err;
 });
 
 server.listen(PORT, () => {

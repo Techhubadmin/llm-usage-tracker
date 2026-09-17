@@ -16,9 +16,9 @@ const SKIP = new Set([
   PROJECT_HEADER,
 ]);
 
-export async function proxy(req, res, provider, upstreamPath) {
+export async function proxy(req, res, provider, upstreamPath, pathProject) {
   const started = Date.now();
-  const project = req.headers[PROJECT_HEADER] || process.env.LLM_PROJECT || 'default';
+  const project = req.headers[PROJECT_HEADER] || pathProject || process.env.LLM_PROJECT || 'default';
 
   let body = await readBody(req);
   let reqJson = null;
@@ -68,6 +68,10 @@ export async function proxy(req, res, provider, upstreamPath) {
   let usage = null;
   if (isSse) usage = usageFromSse(provider, text);
   else { try { usage = usageFromJson(provider, JSON.parse(text)); } catch { /* no usage in body */ } }
+
+  // Only generation calls carry usage. Skip successful helper calls (token counting, model
+  // listing) so they don't inflate the request count; failures are always recorded.
+  if (!usage && upstream.status < 400) return;
 
   record({
     provider,

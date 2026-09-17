@@ -21,13 +21,36 @@ OPENAI_BASE_URL=http://localhost:4141/proxy/openai/v1
 ```
 
 Both streaming and non-streaming calls are handled. Your API key passes straight through and
-is never stored. Tag calls with a project by adding a header:
+is never stored. Tag calls with a project by putting the name in the URL before `/v1`:
 
-```python
-client = anthropic.Anthropic(default_headers={"x-llm-project": "chatbot"})
+```bash
+ANTHROPIC_BASE_URL=http://localhost:4141/proxy/anthropic/chatbot
+OPENAI_BASE_URL=http://localhost:4141/proxy/openai/chatbot/v1
 ```
 
-Without a header, the `LLM_PROJECT` environment variable is used, then `"default"`.
+or by sending an `x-llm-project` header, which wins over the URL. Without either, the
+`LLM_PROJECT` environment variable is used, then `"default"`.
+
+**Claude Code:** add to `~/.claude/settings.json` (tags calls as `claude-code`):
+
+```json
+{ "env": { "ANTHROPIC_BASE_URL": "http://localhost:4141/proxy/anthropic/claude-code",
+           "ENABLE_TOOL_SEARCH": "true" } }
+```
+
+Claude Code refuses to start requests if the proxy is down, so keep the tracker running.
+Remote Control is disabled while a non-Anthropic base URL is set.
+
+**Codex:** only works with API-key auth (ChatGPT sign-in talks to a different backend).
+Add a provider to `~/.codex/config.toml` and select it with `model_provider = "tracked"`:
+
+```toml
+[model_providers.tracked]
+name = "OpenAI via usage tracker"
+base_url = "http://localhost:4141/proxy/openai/codex/v1"
+env_key = "OPENAI_API_KEY"
+wire_api = "responses"
+```
 
 **2. Direct log.** For anything that cannot go through the proxy, post the numbers:
 
@@ -67,3 +90,12 @@ public/index.html  the dashboard (vanilla HTML/JS, one file)
 pricing.json     editable price table
 usage.db         created on first run (set DB_PATH to move it)
 ```
+
+## Run at logon (Windows)
+
+```powershell
+powershell -File scripts\windows\install-startup-task.ps1
+```
+
+Registers a scheduled task that starts the tracker hidden when you log on, with output in
+`tracker.log`. Remove it with `Unregister-ScheduledTask -TaskName 'LLM Usage Tracker'`.
