@@ -2,3 +2,4 @@ usage.db
 usage.db-*
 node_modules/
 .DS_Store
+tracker.log
