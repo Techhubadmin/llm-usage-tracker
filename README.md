@@ -42,9 +42,9 @@ the tracker will read the provider's field names for you.
 ## Pricing
 
 Costs come from `pricing.json`: USD per million tokens, keyed by model-id prefix (longest match
-wins, so `claude-opus-5` also covers any dated variant). Anthropic models are filled in. Add
-other providers' models there; until you do, those calls show as **no price** in the UI rather
-than as $0. Restart the server after editing.
+wins, so `gpt-4o` also covers `gpt-4o-2024-08-06`). Anthropic and OpenAI models are filled in,
+with the fetch date noted in the file. Add anything else there; until you do, those calls show as
+**no price** in the UI rather than as $0. Restart the server after editing.
 
 ## API
 
